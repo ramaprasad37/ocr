@@ -84,7 +84,7 @@ def preprocess_image(
 
 def extract_text_from_image(
     image_path: str,
-    language: str = "Malayalam",
+    language: str = "auto",
     prompt: Optional[str] = None,
     mime_type: Optional[str] = None,
     translate_to: Optional[str] = None,
@@ -147,7 +147,7 @@ def extract_text_from_image(
             "5. Quality Assurance Check: Before finalizing each block, verify that every character in the extracted text is actually visible in the image. If you are uncertain about any character, replace the entire uncertain word or phrase with [...]. Set confidence score to 0.5 or lower if any part of the block contains [...], indicating uncertainty.",
         ]
         steps.append(
-            f"{len(steps) + 1}. Output Text: Present the extracted text as high-quality Unicode in {language}, maintaining original headings and paragraphs where possible. Use [...] for any unreadable portions - do not attempt to guess or infer missing text."
+            f"{len(steps) + 1}. Output Text: Present the extracted text as high-quality Unicode in the detected language of the document (the language actually visible in the image). Do not translate or convert to another language. Maintain original headings and paragraphs where possible. Use [...] for any unreadable portions - do not attempt to guess or infer missing text."
         )
         translation_step_number = len(steps) + 1
         translation_structure_line = ""
@@ -200,7 +200,7 @@ def extract_text_from_image(
         )
 
         # 6. Output the Result
-        print(f"\n--- Extracted {language} Layout-Aware Text ---")
+        print("\n--- Extracted (detected language) Layout-Aware Text ---")
         raw_output = response.text or ""
         parsed_output: Optional[Union[str, Dict[str, Any]]]
 
@@ -231,8 +231,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--language",
         type=str,
-        default="Malayalam",
-        help="Target language for the extracted text (default: Malayalam).",
+        default="auto",
+        help="Optional hint for expected language; output is always in the detected language of the document.",
     )
     parser.add_argument(
         "--translate-to",

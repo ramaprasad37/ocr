@@ -320,7 +320,7 @@ def _dict_items_to_list(data: Dict[str, Any]) -> List[str]:
 def extract_text_from_image(
     image_path: Optional[str] = None,
     image_bytes: Optional[bytes] = None,
-    language: str = "Malayalam",
+    language: str = "auto",
     prompt: Optional[str] = None,
     mime_type: Optional[str] = None,
     translate_to: Optional[str] = None,
@@ -405,7 +405,7 @@ def extract_text_from_image(
                 docai_config=validated_config,
             )
             structured_content = _document_ai_to_structured(document_obj)
-            print(f"\n--- Extracted {language} Layout-Aware Text (Document AI) ---")
+            print("\n--- Extracted (detected language) Layout-Aware Text (Document AI) ---")
             for block in structured_content.get("blocks", []):
                 print(block.get("text", ""))
             print("--------------------------------------")
@@ -445,7 +445,7 @@ def extract_text_from_image(
             "5. Quality Assurance Check: Before finalizing each block, verify that every character in the extracted text is actually visible in the image. If you are uncertain about any character, replace the entire uncertain word or phrase with [...]. Set confidence score to 0.5 or lower if any part of the block contains [...], indicating uncertainty.",
         ]
         steps.append(
-            f"{len(steps) + 1}. Output Text: Present the extracted text as high-quality Unicode in {language}, maintaining original headings and paragraphs where possible. Use [...] for any unreadable portions - do not attempt to guess or infer missing text."
+            f"{len(steps) + 1}. Output Text: Present the extracted text as high-quality Unicode in the detected language of the document (the language actually visible in the image). Do not translate or convert to another language. Maintain original headings and paragraphs where possible. Use [...] for any unreadable portions - do not attempt to guess or infer missing text."
         )
 
         translation_structure_line = ""
@@ -498,7 +498,7 @@ def extract_text_from_image(
         )
 
         # 6. Output the Result
-        print(f"\n--- Extracted {language} Layout-Aware Text ---")
+        print("\n--- Extracted (detected language) Layout-Aware Text ---")
         raw_output = response.text or ""
         parsed_output: Optional[Union[str, Dict[str, Any]]]
 
@@ -583,7 +583,7 @@ def extract_text_from_image(
 
 def pdf_to_layout_json(
     pdf_path: str,
-    language: str = "Malayalam",
+    language: str = "auto",
     prompt: Optional[str] = None,
     translate_to: Optional[str] = None,
     preprocess: bool = False,
@@ -798,12 +798,8 @@ def generate_html_document(result: Union[str, Dict[str, Any]]) -> str:
     engine_label: Optional[str] = None
     if isinstance(structured_result, dict):
         engine_label = structured_result.get("engine")
-    usage_override: Optional[Dict[str, Any]] = None
-    cost_override: Optional[Dict[str, Any]] = None
 
     if isinstance(structured_result, dict) and "content" in structured_result and "pages" not in structured_result:
-        usage_override = structured_result.get("usage")
-        cost_override = structured_result.get("cost")
         structured_result = _coerce_structured_result(structured_result.get("content"))
 
     if isinstance(structured_result, dict):
@@ -825,29 +821,12 @@ def generate_html_document(result: Union[str, Dict[str, Any]]) -> str:
             margin-bottom: 24px;
             color: #555;
         }
-        .stats-heading {
-            margin-top: 16px;
-            font-weight: bold;
-            color: #444;
-        }
-        .stats-list {
-            margin: 6px 0 0 22px;
-            padding: 0;
-            list-style: disc;
-            font-size: 0.9rem;
-            color: #444;
-        }
         .page {
             background-color: #ffffff;
             border-radius: 8px;
             padding: 24px;
             margin-bottom: 28px;
             box-shadow: 0 3px 10px rgba(0, 0, 0, 0.08);
-        }
-        .page-meta {
-            margin-top: 12px;
-            font-size: 0.9rem;
-            color: #555;
         }
         .page-title {
             font-size: 1.1rem;
@@ -889,12 +868,6 @@ def generate_html_document(result: Union[str, Dict[str, Any]]) -> str:
         .translation-content p:last-child {
             margin-bottom: 0;
         }
-        footer {
-            margin-top: 32px;
-            font-size: 0.85rem;
-            color: #777;
-            text-align: center;
-        }
     """
 
     html_parts = [
@@ -924,21 +897,6 @@ def generate_html_document(result: Union[str, Dict[str, Any]]) -> str:
             f"    <div class=\"document-meta\">Source: {html.escape(structured_result.get('pdf', ''))}<br>"
             f"    Primary language requested: {html.escape(str(language))}.{translate_note}{engine_note}</div>"
         )
-
-        usage_summary = structured_result.get("usage_summary")
-        cost_summary = structured_result.get("cost_summary")
-        if usage_summary:
-            html_parts.append("    <div class=\"stats-heading\">Usage Summary</div>")
-            html_parts.append("    <ul class=\"stats-list\">")
-            for line in _dict_items_to_list(usage_summary):
-                html_parts.append(f"        <li>{html.escape(line)}</li>")
-            html_parts.append("    </ul>")
-        if cost_summary:
-            html_parts.append("    <div class=\"stats-heading\">Cost Summary</div>")
-            html_parts.append("    <ul class=\"stats-list\">")
-            for line in _dict_items_to_list(cost_summary):
-                html_parts.append(f"        <li>{html.escape(line)}</li>")
-            html_parts.append("    </ul>")
 
         for page_entry in structured_result.get("pages", []):
             page_number = page_entry.get("page", "?")
@@ -984,22 +942,6 @@ def generate_html_document(result: Union[str, Dict[str, Any]]) -> str:
             else:
                 html_parts.append("        <div class=\"no-data\">No data returned for this page.</div>")
 
-            page_usage = page_entry.get("usage")
-            if page_usage:
-                html_parts.append("        <div class=\"page-meta\">Usage</div>")
-                html_parts.append("        <ul class=\"stats-list\">")
-                for line in _dict_items_to_list(page_usage):
-                    html_parts.append(f"            <li>{html.escape(line)}</li>")
-                html_parts.append("        </ul>")
-
-            page_cost = page_entry.get("cost")
-            if page_cost:
-                html_parts.append("        <div class=\"page-meta\">Cost</div>")
-                html_parts.append("        <ul class=\"stats-list\">")
-                for line in _dict_items_to_list(page_cost):
-                    html_parts.append(f"            <li>{html.escape(line)}</li>")
-                html_parts.append("        </ul>")
-
             page_error = page_entry.get("error")
             if page_error:
                 html_parts.append(
@@ -1019,10 +961,6 @@ def generate_html_document(result: Union[str, Dict[str, Any]]) -> str:
             html_parts.append(
                 f"        <div class=\"page-language\">Detected language: {html.escape(str(detected_language))}</div>"
             )
-            if engine_label:
-                html_parts.append(
-                    f"        <div class=\"page-meta\">Engine: {html.escape(str(engine_label))}</div>"
-                )
             paragraphs = _blocks_to_paragraphs(structured_result.get("blocks", []))
             if paragraphs:
                 html_parts.append("        <div class=\"page-content\">")
@@ -1052,30 +990,11 @@ def generate_html_document(result: Union[str, Dict[str, Any]]) -> str:
                     f"            <p>{html.escape(structured_result)}</p>"
                     "        </div>"
                 )
-            if engine_label:
-                html_parts.append(
-                    f"        <div class=\"page-meta\">Engine: {html.escape(str(engine_label))}</div>"
-                )
         else:
             html_parts.append("        <div class=\"no-data\">No data returned.</div>")
 
-        if usage_override:
-            html_parts.append("        <div class=\"page-meta\">Usage</div>")
-            html_parts.append("        <ul class=\"stats-list\">")
-            for line in _dict_items_to_list(usage_override):
-                html_parts.append(f"            <li>{html.escape(line)}</li>")
-            html_parts.append("        </ul>")
-
-        if cost_override:
-            html_parts.append("        <div class=\"page-meta\">Cost</div>")
-            html_parts.append("        <ul class=\"stats-list\">")
-            for line in _dict_items_to_list(cost_override):
-                html_parts.append(f"            <li>{html.escape(line)}</li>")
-            html_parts.append("        </ul>")
-
         html_parts.append("    </section>")
 
-    html_parts.append("    <footer>Generated by OCR pipeline</footer>")
     html_parts.extend(["</body>", "</html>"])
     return "\n".join(html_parts)
 
@@ -1163,8 +1082,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--language",
         type=str,
-        default="Malayalam",
-        help="Target language for the extracted text (default: Malayalam).",
+        default="auto",
+        help="Optional hint for expected language; output is always in the detected language of the document.",
     )
     parser.add_argument(
         "--translate-to",

@@ -57,7 +57,7 @@ Single image:
 
 ```bash
 python ocr_jpg.py path/to/image.jpg \
-  --language Malayalam \
+  --language auto \
   --translate-to English \
   --preprocess \
   --output out.json \
@@ -67,14 +67,14 @@ python ocr_jpg.py path/to/image.jpg \
 **Process a folder:** pass a directory path; each image is processed and written as `<filename>.html` in the same folder (content-only HTML, no metadata). Optional `--output <dir>` writes `<stem>.json` for each image into that directory.
 
 ```bash
-python ocr_jpg.py path/to/images/ --language Malayalam
+python ocr_jpg.py path/to/images/
 # Writes path/to/images/photo1.html, path/to/images/photo2.html, ...
 ```
 
 Key options:
 
 - `path`: image file or folder of images. For a folder, each image is written as `<stem>.html` (content-only) in the same folder.
-- `--language`: target language name (default `Malayalam`).
+- `--language`: optional hint for expected language; extracted text is always in the detected language of the document (no translation).
 - `--translate-to`: optional translation language for each block.
 - `--preprocess/--no-preprocess`: toggle image cleanup (default on).
 - `--resize-long-edge`: max pixels for longest edge when preprocessing (default 2048).
@@ -91,7 +91,7 @@ Key options:
 ```bash
 python ocr.py path/to/document.pdf \
   --mode pdf \
-  --language Malayalam \
+  --language auto \
   --engine gemini \
   --translate-to English \
   --preprocess \
@@ -169,4 +169,4 @@ MIT License unless otherwise noted. Adjust this section to match your project’
 
 Example:
 
-python ocr.py LSMalayalam.pdf --language Malayalam --preprocess  --html-output Lsmalayalam.html  --output lsmalayalam.json --page-limit 10 --engine gemini --pricing-input-per-million 0.15 --pricing-output-per-million 0.6
+python ocr.py document.pdf --preprocess --html-output document.html --output document.json --page-limit 10 --engine gemini
