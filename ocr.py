@@ -1146,13 +1146,13 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "input_path",
         type=str,
-        help="Path to the input image or PDF file.",
+        help="Path to an image, a PDF file, or a folder of PDFs (use --mode pdf for a folder).",
     )
     parser.add_argument(
         "--mode",
         choices=["auto", "image", "pdf"],
         default="auto",
-        help="Force processing mode (default: auto-detect by file extension).",
+        help="Processing mode: auto (default), image, or pdf. For a directory, use pdf to process all PDFs.",
     )
     parser.add_argument(
         "--engine",
@@ -1248,13 +1248,13 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--output",
         type=str,
         default=None,
-        help="Optional path to write the aggregated results as JSON.",
+        help="JSON path: file (single input) or directory (folder; writes <stem>.json per PDF).",
     )
     parser.add_argument(
         "--html-output",
         type=str,
         default=None,
-        help="Optional path to write the Unicode HTML rendition of the results.",
+        help="HTML path: file (single input) or directory (folder; writes <stem>.html per PDF). Default folder = input folder.",
     )
     return parser
 
@@ -1281,8 +1281,13 @@ def main() -> None:
     args = parser.parse_args()
 
     input_path = Path(args.input_path)
+    if not input_path.exists():
+        raise SystemExit(f"Path not found: {input_path}")
+
     if args.mode == "auto":
-        if input_path.suffix.lower() == ".pdf":
+        if input_path.is_dir():
+            mode = "pdf"
+        elif input_path.suffix.lower() == ".pdf":
             mode = "pdf"
         else:
             mode = "image"
@@ -1303,13 +1308,52 @@ def main() -> None:
         except Exception as exc:
             raise SystemExit(f"Document AI configuration error: {exc}") from exc
 
+    # Folder of PDFs: process each PDF and write <stem>.html (and optionally <stem>.json)
+    if input_path.is_dir() and mode == "pdf":
+        pdf_files = sorted(
+            (p for p in input_path.iterdir() if p.is_file() and p.suffix.lower() == ".pdf"),
+            key=lambda p: p.name,
+        )
+        if not pdf_files:
+            raise SystemExit(f"No PDF files found in {input_path}")
+        html_out_dir = Path(args.html_output) if args.html_output else input_path
+        html_out_dir.mkdir(parents=True, exist_ok=True)
+        out_dir = Path(args.output) if args.output else None
+        if out_dir is not None:
+            out_dir.mkdir(parents=True, exist_ok=True)
+        for i, pdf_path in enumerate(pdf_files):
+            print(f"\n[{i + 1}/{len(pdf_files)}] Processing {pdf_path.name}...")
+            try:
+                result = pdf_to_layout_json(
+                    pdf_path=str(pdf_path),
+                    language=args.language,
+                    prompt=args.prompt,
+                    translate_to=args.translate_to,
+                    preprocess=args.preprocess,
+                    resize_long_edge=args.resize_long_edge,
+                    dpi=args.pdf_dpi,
+                    page_limit=args.page_limit,
+                    pricing_input_per_million=args.pricing_input_per_million,
+                    pricing_output_per_million=args.pricing_output_per_million,
+                    engine=engine,
+                    docai_config=docai_config,
+                )
+                html_path = html_out_dir / f"{pdf_path.stem}.html"
+                html_doc = generate_html_document(result)
+                write_html_output(html_path, html_doc)
+                if out_dir is not None:
+                    write_json_output(out_dir / f"{pdf_path.stem}.json", result)
+            except Exception as e:
+                print(f"  Error processing {pdf_path.name}: {e}")
+        return
+
+    if input_path.is_dir():
+        raise SystemExit("Input path is a directory. Use --mode pdf to process all PDFs in the folder.")
+
     result: Optional[Dict[str, Any]] = None
     html_input: Optional[Union[str, Dict[str, Any]]] = None
 
     if mode == "image":
-        if not input_path.exists():
-            raise FileNotFoundError(f"Image file not found at {input_path}")
-
         result = extract_text_from_image(
             image_path=str(input_path),
             language=args.language,
