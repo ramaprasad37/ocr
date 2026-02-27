@@ -2,7 +2,10 @@ import argparse
 import io
 import json
 import mimetypes
+from pathlib import Path
 from typing import Any, Dict, Optional, Tuple, Union
+
+from ocr import generate_html_document_content_only
 
 from google import genai
 from google.genai.types import Part
@@ -221,9 +224,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
         description="Extract multilingual OCR text with layout metadata using Google Gemini."
     )
     parser.add_argument(
-        "image",
+        "path",
         type=str,
-        help="Path to the image file to process.",
+        help="Path to an image file or folder of images to process.",
     )
     parser.add_argument(
         "--language",
@@ -267,15 +270,73 @@ def build_arg_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Print raw model response even if JSON parsing succeeds.",
     )
+    parser.add_argument(
+        "--output",
+        type=str,
+        default=None,
+        help="Path for JSON: file (single image) or directory (folder; writes <stem>.json per image).",
+    )
+    parser.add_argument(
+        "--html-output",
+        type=str,
+        default=None,
+        help="Path to write the HTML result (single image only). For a folder, each image gets <stem>.html in place.",
+    )
     return parser
+
+
+# Supported image extensions when processing a folder
+IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tiff", ".tif"}
 
 
 def main() -> None:
     parser = build_arg_parser()
     args = parser.parse_args()
+    path = Path(args.path)
 
+    if not path.exists():
+        raise SystemExit(f"Path not found: {path}")
+
+    if path.is_dir():
+        # Process entire folder: each image -> <stem>.html (content-only) in same folder
+        image_paths = sorted(
+            p for p in path.iterdir()
+            if p.is_file() and p.suffix.lower() in IMAGE_EXTENSIONS
+        )
+        if not image_paths:
+            raise SystemExit(f"No image files found in {path} (supported: {', '.join(IMAGE_EXTENSIONS)})")
+        for i, img_path in enumerate(image_paths):
+            print(f"\n[{i + 1}/{len(image_paths)}] Processing {img_path.name}...")
+            result = extract_text_from_image(
+                image_path=str(img_path),
+                language=args.language,
+                prompt=args.prompt,
+                mime_type=args.mime_type,
+                translate_to=args.translate_to,
+                preprocess=args.preprocess,
+                resize_long_edge=args.resize_long_edge,
+            )
+            if result is not None:
+                html_path = img_path.with_suffix(".html")
+                html_doc = generate_html_document_content_only(result)
+                with open(html_path, "w", encoding="utf-8") as f:
+                    f.write(html_doc)
+                print(f"  Wrote {html_path}")
+                if args.output:
+                    out_dir = Path(args.output)
+                    out_dir.mkdir(parents=True, exist_ok=True)
+                    json_path = out_dir / f"{img_path.stem}.json"
+                    with open(json_path, "w", encoding="utf-8") as f:
+                        if isinstance(result, dict):
+                            json.dump(result, f, ensure_ascii=False, indent=2)
+                        else:
+                            f.write(str(result))
+                    print(f"  Wrote {json_path}")
+        return
+
+    # Single file
     result = extract_text_from_image(
-        image_path=args.image,
+        image_path=str(path),
         language=args.language,
         prompt=args.prompt,
         mime_type=args.mime_type,
@@ -287,6 +348,24 @@ def main() -> None:
     if args.raw_output and isinstance(result, dict):
         print("\n--- Raw JSON Output ---")
         print(json.dumps(result, ensure_ascii=False))
+
+    if args.output and result is not None:
+        output_path = Path(args.output)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(output_path, "w", encoding="utf-8") as f:
+            if isinstance(result, dict):
+                json.dump(result, f, ensure_ascii=False, indent=2)
+            else:
+                f.write(str(result))
+        print(f"Results written to {output_path}")
+
+    if args.html_output and result is not None:
+        html_doc = generate_html_document_content_only(result)
+        html_path = Path(args.html_output)
+        html_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(html_path, "w", encoding="utf-8") as f:
+            f.write(html_doc)
+        print(f"Unicode HTML written to {html_path}")
 
 
 if __name__ == "__main__":

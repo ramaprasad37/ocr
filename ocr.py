@@ -1080,6 +1080,65 @@ def generate_html_document(result: Union[str, Dict[str, Any]]) -> str:
     return "\n".join(html_parts)
 
 
+def generate_html_document_content_only(result: Union[str, Dict[str, Any]]) -> str:
+    """
+    Returns minimal HTML containing only the extracted text content (no metadata, usage, or costs).
+    """
+    structured_result = _coerce_structured_result(result)
+    if isinstance(structured_result, dict) and "content" in structured_result and "pages" not in structured_result:
+        structured_result = _coerce_structured_result(structured_result.get("content"))
+
+    stylesheet = """
+        body { font-family: "Noto Sans", "Helvetica Neue", Arial, sans-serif; max-width: 840px; margin: 0 auto; padding: 32px 20px; color: #222; }
+        .page-content p { font-size: 1rem; line-height: 1.7; margin-bottom: 1.2em; white-space: pre-wrap; }
+        .page-content p:last-child { margin-bottom: 0; }
+        .translation-title { margin-top: 20px; font-weight: bold; }
+        .translation-content p { font-size: 0.95rem; line-height: 1.6; background-color: #eef6ff; border-left: 3px solid #2a7ae4; padding: 14px 18px; margin-bottom: 1em; }
+        .translation-content p:last-child { margin-bottom: 0; }
+    """
+    parts = [
+        "<!DOCTYPE html>",
+        '<html lang="en">',
+        "<head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"><style>",
+        stylesheet,
+        "</style></head><body>",
+    ]
+
+    def append_content(structured: Union[str, Dict[str, Any], None]) -> None:
+        if structured is None:
+            return
+        if isinstance(structured, dict):
+            paragraphs = _blocks_to_paragraphs(structured.get("blocks", []))
+            if paragraphs:
+                parts.append("<div class=\"page-content\">")
+                for p in paragraphs:
+                    parts.append(f"<p>{html.escape(p)}</p>")
+                parts.append("</div>")
+            trans = _blocks_to_translation_paragraphs(structured.get("blocks", []))
+            if trans:
+                parts.append("<div class=\"translation-title\">Translation</div><div class=\"translation-content\">")
+                for p in trans:
+                    parts.append(f"<p>{html.escape(p)}</p>")
+                parts.append("</div>")
+        elif isinstance(structured, str):
+            paras = _extract_paragraphs_from_string(structured)
+            if paras:
+                parts.append("<div class=\"page-content\">")
+                for p in paras:
+                    parts.append(f"<p>{html.escape(p)}</p>")
+                parts.append("</div>")
+
+    if isinstance(structured_result, dict) and "pages" in structured_result:
+        for page_entry in structured_result.get("pages", []):
+            page_result = _coerce_structured_result(page_entry.get("result") or page_entry.get("raw_text") or "")
+            append_content(page_result)
+    else:
+        append_content(structured_result)
+
+    parts.extend(["</body>", "</html>"])
+    return "\n".join(parts)
+
+
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Extract multilingual OCR with layout metadata from images or PDFs using Google Gemini."

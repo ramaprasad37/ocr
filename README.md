@@ -53,28 +53,35 @@ Create or reuse a Document AI processor ID (OCR or Form Parser), and note the **
 
 ### Image OCR (`ocr_jpg.py`)
 
+Single image:
+
 ```bash
 python ocr_jpg.py path/to/image.jpg \
   --language Malayalam \
   --translate-to English \
   --preprocess \
-  --pricing-input-per-million 0.07 \
-  --pricing-output-per-million 0.21 \
   --output out.json \
   --html-output out.html
 ```
 
+**Process a folder:** pass a directory path; each image is processed and written as `<filename>.html` in the same folder (content-only HTML, no metadata). Optional `--output <dir>` writes `<stem>.json` for each image into that directory.
+
+```bash
+python ocr_jpg.py path/to/images/ --language Malayalam
+# Writes path/to/images/photo1.html, path/to/images/photo2.html, ...
+```
+
 Key options:
 
+- `path`: image file or folder of images. For a folder, each image is written as `<stem>.html` (content-only) in the same folder.
 - `--language`: target language name (default `Malayalam`).
 - `--translate-to`: optional translation language for each block.
 - `--preprocess/--no-preprocess`: toggle image cleanup (default on).
 - `--resize-long-edge`: max pixels for longest edge when preprocessing (default 2048).
 - `--prompt`: custom instruction override.
 - `--mime-type`: explicit MIME type when inference is unreliable.
-- `--output`: path for structured JSON.
-- `--html-output`: path for Unicode HTML rendition.
-- `--pricing-input-per-million` / `--pricing-output-per-million`: token rates (USD per million) to estimate costs.
+- `--output`: JSON path (file for single image; directory for folder, writes `<stem>.json` per image).
+- `--html-output`: HTML path (single image only). Folder mode always writes content-only `<stem>.html` next to each image.
 - `--raw-output`: print raw Gemini response even if JSON parsing succeeds.
 
 > Need Document AI for single images? Use `ocr.py` with `--mode image --engine docai` instead of `ocr_jpg.py`.
